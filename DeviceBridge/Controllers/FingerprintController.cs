@@ -1,79 +1,108 @@
 using System;
+using System.Collections.Generic;
 using System.Web.Http;
 using DeviceBridge.Services;
-using DeviceBridge.Models;
+using System.Threading;
+using System.Windows.Forms;
 
 namespace DeviceBridge.Controllers
 {
 	[RoutePrefix("api/fingerprint")]
 	public class FingerprintController : ApiController
 	{
+		private static readonly System.Threading.SemaphoreSlim _deviceLock = new System.Threading.SemaphoreSlim(1, 1);
+
 		[HttpPost, Route("enroll")]
 		public IHttpActionResult Enroll()
 		{
-			using (var enroller = new FingerprintEnroll())
-			{
-				var ok = enroller.TryEnroll(timeoutMs: 30_000, out var tpl);
-				if (!ok || tpl == null) return BadRequest("Enrollment timed out or failed.");
-				var b64 = Convert.ToBase64String(tpl);
-				return Ok(new { template = b64, format = "DPFP", quality = (int?)null });
-			}
-		}
+			byte[] tpl = null;
+			bool ok = false;
+			Exception workerEx = null;
+			var corrId = Guid.NewGuid().ToString("N").Substring(0, 8);
+			System.Diagnostics.Debug.WriteLine($"[Enroll {corrId}] start");
 
-		[HttpPost, Route("enroll/start")]
-		public IHttpActionResult StartEnrollment([FromBody] StartEnrollmentRequest request)
-		{
 			try
 			{
-				if (request == null) request = new StartEnrollmentRequest();
-				if (!string.IsNullOrEmpty(request.finger_type) && request.finger_type != "index" && request.finger_type != "thumb")
-					return BadRequest("finger_type must be 'index' or 'thumb'");
-				if (request.quality_threshold < 1 || request.quality_threshold > 100)
-					return BadRequest("quality_threshold must be between 1 and 100");
+				// Ensure exclusive access to the device
+				_deviceLock.Wait();
 
-				var sessionId = EnrollmentSessionManager.Instance.StartEnrollmentSession(
-					request.finger_type ?? "index",
-					request.quality_threshold);
-
-				return Ok(new StartEnrollmentResponse
+				var t = new Thread(() =>
 				{
-					success = true,
-					session_id = sessionId,
-					status = "waiting",
-					message = "Place finger on scanner"
+					try
+					{
+						// Create a proper Windows message loop in STA thread
+						using (var enroller = new FingerprintEnroll())
+						{
+							// Run enrollment with message loop
+							ok = RunEnrollmentWithMessageLoop(enroller, 30_000, out tpl);
+						}
+					}
+					catch (Exception ex)
+					{
+						workerEx = ex;
+					}
 				});
+				try { t.SetApartmentState(ApartmentState.STA); } catch { }
+				t.IsBackground = true;
+				t.Start();
+				t.Join();
+
+				if (workerEx != null) throw workerEx;
+				if (!ok || tpl == null)
+				{
+					System.Diagnostics.Debug.WriteLine($"[Enroll {corrId}] failed (timeout or null template)");
+					return BadRequest("Enrollment timed out or failed.");
+				}
+				var b64 = Convert.ToBase64String(tpl);
+				System.Diagnostics.Debug.WriteLine($"[Enroll {corrId}] success bytes={tpl.Length}");
+				return Ok(new { template = b64, format = "DPFP", quality = (int?)null });
 			}
 			catch (Exception ex)
 			{
-				return InternalServerError(ex);
+				System.Diagnostics.Debug.WriteLine($"[Enroll {corrId}] exception: {ex.Message}");
+				return BadRequest(ex.Message);
+			}
+			finally
+			{
+				try { _deviceLock.Release(); } catch { }
+				System.Diagnostics.Debug.WriteLine($"[Enroll {corrId}] end");
 			}
 		}
 
-		[HttpGet, Route("enroll/progress/{sessionId}")]
-		public IHttpActionResult GetEnrollmentProgress(string sessionId)
+		private bool RunEnrollmentWithMessageLoop(FingerprintEnroll enroller, int timeoutMs, out byte[] templateBytes)
 		{
-			if (string.IsNullOrEmpty(sessionId)) return BadRequest("Session ID is required");
-			var session = EnrollmentSessionManager.Instance.GetSession(sessionId);
-			if (session == null) return NotFound();
-
-			var response = new EnrollmentProgressResponse
+			templateBytes = null;
+			var result = false;
+			var startTime = DateTime.Now;
+			
+			// Start enrollment
+			enroller.Start();
+			
+			try
 			{
-				session_id = session.SessionId,
-				progress = session.Progress,
-				status = session.Status,
-				instruction = session.Instruction,
-				template = session.Template,
-				quality = session.Quality,
-				error = session.Error
-			};
-
-			if (session.Status == "completed" || session.Status == "failed")
-			{
-				System.Threading.Tasks.Task.Delay(5000).ContinueWith(_ =>
-					EnrollmentSessionManager.Instance.RemoveSession(sessionId));
+				// Run a proper Windows message loop
+				while ((DateTime.Now - startTime).TotalMilliseconds < timeoutMs)
+				{
+					// Process Windows messages
+					Application.DoEvents();
+					
+					// Check if enrollment completed
+					if (enroller.IsComplete(out templateBytes))
+					{
+						result = true;
+						break;
+					}
+					
+					// Small delay to prevent 100% CPU
+					Thread.Sleep(10);
+				}
 			}
-
-			return Ok(response);
+			finally
+			{
+				enroller.Stop();
+			}
+			
+			return result;
 		}
 
 		[HttpGet, Route("test/device")]
@@ -89,6 +118,140 @@ namespace DeviceBridge.Controllers
 			{
 				return Ok(new { available = false, error = ex.Message });
 			}
+		}
+
+		[HttpGet, Route("test/wpf-comparison")]
+		public IHttpActionResult TestWpfComparison()
+		{
+			return Ok(new { 
+				message = "To test if your reader works:",
+				steps = new[] {
+					"1. Close DeviceBridge completely",
+					"2. Run your WPF FingerprintRegistrationPanel app", 
+					"3. Try the fingerprint registration there",
+					"4. If WPF works but bridge doesn't, it's a threading/STA issue",
+					"5. If WPF also doesn't work, it's a reader/driver issue"
+				},
+				note = "The WPF app uses the same DPFP SDK but in a UI context - this will tell us if the issue is with the reader or the bridge implementation"
+			});
+		}
+
+		[HttpGet, Route("test/events")]
+		public IHttpActionResult TestEvents()
+		{
+			try
+			{
+				using (var enroller = new FingerprintEnroll())
+				{
+					enroller.Start();
+					System.Diagnostics.Debug.WriteLine("=== EVENT TEST: Place finger on reader now ===");
+					System.Threading.Thread.Sleep(10000); // Wait 10 seconds for finger placement
+					enroller.Stop();
+				}
+				return Ok(new { message = "Event test completed. Check debug output for DPFP events." });
+			}
+			catch (Exception ex)
+			{
+				return BadRequest($"Event test failed: {ex.Message}");
+			}
+		}
+
+		[HttpGet, Route("test/finger")]
+		public IHttpActionResult TestFingerDetection()
+		{
+			try
+			{
+				using (var capture = new DPFP.Capture.Capture())
+				{
+					var events = new List<string>();
+					capture.EventHandler = new SimpleEventHandler(events);
+					
+					// Try different capture initialization
+					try 
+					{
+						// Some readers need this to enable finger detection
+						capture.StartCapture();
+						System.Diagnostics.Debug.WriteLine("=== FINGER DETECTION TEST: Touch the reader now ===");
+						
+						// Try multiple finger placements with different techniques
+						for (int i = 0; i < 4; i++)
+						{
+							System.Diagnostics.Debug.WriteLine($"=== Attempt {i+1}: Place finger firmly and hold for 2 seconds ===");
+							
+							// Pump Windows messages during each attempt
+							for (int j = 0; j < 20; j++) // 2 seconds = 20 * 100ms
+							{
+								System.Windows.Forms.Application.DoEvents();
+								System.Threading.Thread.Sleep(100);
+							}
+						}
+						
+						capture.StopCapture();
+					}
+					catch (Exception capEx)
+					{
+						events.Add($"Capture error: {capEx.Message}");
+						System.Diagnostics.Debug.WriteLine($"Capture error: {capEx.Message}");
+					}
+					
+					return Ok(new { 
+						message = "Finger detection test completed.", 
+						events = events,
+						count = events.Count,
+						note = "Try pressing harder, different finger positions, or check if reader needs cleaning"
+					});
+				}
+			}
+			catch (Exception ex)
+			{
+				return BadRequest($"Finger detection test failed: {ex.Message}");
+			}
+		}
+	}
+
+	public class SimpleEventHandler : DPFP.Capture.EventHandler
+	{
+		private readonly List<string> _events;
+		
+		public SimpleEventHandler(List<string> events)
+		{
+			_events = events;
+		}
+		
+		public void OnComplete(object Capture, string ReaderSerialNumber, DPFP.Sample Sample) 
+		{ 
+			_events.Add($"OnComplete: {ReaderSerialNumber}"); 
+			System.Diagnostics.Debug.WriteLine($"[Simple] OnComplete: {ReaderSerialNumber}");
+		}
+		
+		public void OnFingerTouch(object Capture, string ReaderSerialNumber) 
+		{ 
+			_events.Add($"OnFingerTouch: {ReaderSerialNumber}"); 
+			System.Diagnostics.Debug.WriteLine($"[Simple] OnFingerTouch: {ReaderSerialNumber}");
+		}
+		
+		public void OnFingerGone(object Capture, string ReaderSerialNumber) 
+		{ 
+			_events.Add($"OnFingerGone: {ReaderSerialNumber}"); 
+			System.Diagnostics.Debug.WriteLine($"[Simple] OnFingerGone: {ReaderSerialNumber}");
+		}
+		
+		public void OnReaderConnect(object Capture, string ReaderSerialNumber) 
+		{ 
+			_events.Add($"OnReaderConnect: {ReaderSerialNumber}"); 
+			System.Diagnostics.Debug.WriteLine($"[Simple] OnReaderConnect: {ReaderSerialNumber}");
+		}
+		
+		public void OnReaderDisconnect(object Capture, string ReaderSerialNumber) 
+		{ 
+			_events.Add($"OnReaderDisconnect: {ReaderSerialNumber}"); 
+			System.Diagnostics.Debug.WriteLine($"[Simple] OnReaderDisconnect: {ReaderSerialNumber}");
+		}
+		
+		public void OnSampleQuality(object Capture, string ReaderSerialNumber, DPFP.Capture.CaptureFeedback CaptureFeedback) 
+		{ 
+			_events.Add($"OnSampleQuality: {CaptureFeedback}"); 
+			System.Diagnostics.Debug.WriteLine($"[Simple] OnSampleQuality: {CaptureFeedback}");
 		}
 	}
 }

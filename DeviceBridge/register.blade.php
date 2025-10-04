@@ -421,81 +421,44 @@
         instructionElement.textContent = `Initializing scanner for ${fingerType}...`;
 
         try {
-            // Step 1: Start enrollment session
-            const startResponse = await fetch(`${bridgeBase}/api/fingerprint/enroll/start`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    finger_type: isPrimary ? 'index' : 'thumb',
-                    quality_threshold: 60
-                })
-            });
-
-            if (!startResponse.ok) {
-                throw new Error(`HTTP ${startResponse.status}: ${startResponse.statusText}`);
-            }
-
-            const startResult = await startResponse.json();
-            const sessionId = startResult.session_id;
-
-            progressBarElement.style.width = '10%';
+            // One-shot enrollment call to Device Bridge
             instructionElement.textContent = `Place your ${fingerType} on the scanner...`;
             statusElement.textContent = 'Waiting for finger...';
+            progressBarElement.style.width = '15%';
 
-            // Step 2: Poll for progress
-            let progress = 0;
-            let attempts = 0;
-            const maxAttempts = 60; // 30 seconds timeout
+            const enrollResponse = await fetch(`${bridgeBase}/api/fingerprint/enroll`, {
+                method: 'POST',
+                headers: { 'Accept': 'application/json' },
+                cache: 'no-store',
+                signal: AbortSignal.timeout(65000)
+            });
 
-            while (progress < 100 && attempts < maxAttempts) {
-                await new Promise(resolve => setTimeout(resolve, 500)); // Wait 500ms
-                attempts++;
-
-                try {
-                    const progressResponse = await fetch(`${bridgeBase}/api/fingerprint/enroll/progress/${sessionId}`);
-
-                    if (progressResponse.ok) {
-                        const progressData = await progressResponse.json();
-                        progress = progressData.progress || 0;
-                        const status = progressData.status || 'scanning';
-                        const instruction = progressData.instruction || `Keep ${fingerType} steady...`;
-
-                        // Update UI
-                        progressBarElement.style.width = `${progress}%`;
-                        instructionElement.textContent = instruction;
-
-                        if (status === 'completed' && progressData.template) {
-                            // Success
-                            templateElement.value = progressData.template;
-                            statusElement.textContent = `${isPrimary ? 'Primary' : 'Backup'} fingerprint captured successfully!`;
-                            statusElement.className = 'text-success fw-bold';
-                            instructionElement.textContent = `${fingerType.charAt(0).toUpperCase() + fingerType.slice(1)} enrolled successfully!`;
-
-                            showNotification(
-                                isPrimary ? 'Primary Fingerprint Captured!' : 'Backup Fingerprint Captured!',
-                                isPrimary ? 'You can now proceed to scan the backup fingerprint (thumb) or continue with registration.' : 'Both fingerprints have been captured successfully!',
-                                'success'
-                            );
-                            break;
-                        } else if (status === 'failed') {
-                            throw new Error(progressData.error || 'Enrollment failed');
-                        } else if (status === 'waiting') {
-                            statusElement.textContent = 'Place finger on scanner...';
-                        } else if (status === 'scanning') {
-                            statusElement.textContent = 'Scanning in progress...';
-                        }
-                    }
-                } catch (progressError) {
-                    console.warn('Progress check failed:', progressError);
-                    // Continue trying - might be temporary network issue
-                }
+            if (!enrollResponse.ok) {
+                const text = await enrollResponse.text().catch(() => '');
+                throw new Error(text || `HTTP ${enrollResponse.status}: ${enrollResponse.statusText}`);
             }
 
-            if (progress < 100 && attempts >= maxAttempts) {
-                throw new Error('Enrollment timeout. Please try again.');
+            // Simulate progress while waiting for the single-shot result
+            progressBarElement.style.width = '60%';
+            statusElement.textContent = 'Scanning in progress...';
+            instructionElement.textContent = `Lift and place your ${fingerType} as prompted...`;
+
+            const result = await enrollResponse.json();
+            if (!result?.template) {
+                throw new Error('No template returned from Device Bridge');
             }
+
+            templateElement.value = result.template;
+            progressBarElement.style.width = '100%';
+            statusElement.textContent = `${isPrimary ? 'Primary' : 'Backup'} fingerprint captured successfully!`;
+            statusElement.className = 'text-success fw-bold';
+            instructionElement.textContent = `${fingerType.charAt(0).toUpperCase() + fingerType.slice(1)} enrolled successfully!`;
+
+            showNotification(
+                isPrimary ? 'Primary Fingerprint Captured!' : 'Backup Fingerprint Captured!',
+                isPrimary ? 'You can now proceed to scan the backup fingerprint (thumb) or continue with registration.' : 'Both fingerprints have been captured successfully!',
+                'success'
+            );
 
         } catch (error) {
             console.error('Enrollment error:', error);

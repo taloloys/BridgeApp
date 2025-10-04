@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Threading;
+using System.Windows.Forms;
 using DPFP;
 using DPFP.Capture;
 using DPFP.Processing;
@@ -13,14 +14,32 @@ public class FingerprintEnroll : DPFP.Capture.EventHandler, IDisposable
 	private Template resultTemplate;
 	private bool fingerDetected = false;
 	private double lastQuality = 0;
+	private readonly string sessionId = Guid.NewGuid().ToString("N").Substring(0, 8);
+	private Form hiddenForm;
+
+	private void Log(string message)
+	{
+		System.Diagnostics.Debug.WriteLine($"[Enroll {sessionId}] {message}");
+	}
 
 	public event Action<int, string, string> OnSampleProcessed;
 
 	public FingerprintEnroll()
 	{
+		Log("ctor");
+		
+		// Create a hidden form to provide proper Windows message loop context
+		hiddenForm = new Form();
+		hiddenForm.WindowState = FormWindowState.Minimized;
+		hiddenForm.ShowInTaskbar = false;
+		hiddenForm.Visible = false;
+		hiddenForm.Load += (s, e) => { Log("Hidden form loaded"); };
+		
 		capture = new Capture();
 		capture.EventHandler = this;
 		enrollment = new Enrollment();
+		
+		// Note: Sensitivity adjustment not available in this DPFP version
 	}
 
 	public void Dispose()
@@ -28,33 +47,51 @@ public class FingerprintEnroll : DPFP.Capture.EventHandler, IDisposable
 		try { capture?.StopCapture(); } catch { }
 		capture?.Dispose();
 		sampleEvent?.Dispose();
+		hiddenForm?.Dispose();
 	}
 
 	public void Start()
 	{
 		try
 		{
-			System.Diagnostics.Debug.WriteLine("Starting fingerprint capture...");
+			Log("Starting fingerprint capture...");
 			capture.StartCapture();
-			System.Diagnostics.Debug.WriteLine("Fingerprint capture started successfully");
+			Log("Fingerprint capture started successfully");
+			// Note: some SDK versions don't expose Ready; ignore if unavailable
 		}
 		catch (DPFP.Error.SDKException sdkEx)
 		{
-			System.Diagnostics.Debug.WriteLine($"DPFP SDK Exception: {sdkEx.Message}");
+			Log($"DPFP SDK Exception: {sdkEx.Message}");
 			throw;
 		}
 	}
 
 	public void Stop()
 	{
-		try { capture.StopCapture(); } catch { }
+		try { capture.StopCapture(); Log("StopCapture called"); } catch (Exception ex) { Log($"StopCapture error: {ex.Message}"); }
+	}
+
+	public bool IsComplete(out byte[] templateBytes)
+	{
+		templateBytes = null;
+		if (resultTemplate != null)
+		{
+			using (var ms = new MemoryStream())
+			{
+				resultTemplate.Serialize(ms);
+				templateBytes = ms.ToArray();
+			}
+			Log($"IsComplete: SUCCESS, bytes={templateBytes.Length}");
+			return true;
+		}
+		return false;
 	}
 
 	public void OnComplete(object Capture, string ReaderSerialNumber, Sample sample)
 	{
 		try
 		{
-			System.Diagnostics.Debug.WriteLine("=== OnComplete START ===");
+			Log("=== OnComplete START ===");
 			if (!fingerDetected)
 			{
 				fingerDetected = true;
@@ -62,7 +99,7 @@ public class FingerprintEnroll : DPFP.Capture.EventHandler, IDisposable
 			}
 
 			var features = ExtractFeatures(sample, DataPurpose.Enrollment);
-			System.Diagnostics.Debug.WriteLine($"Features extracted: {features != null}");
+			Log($"Features extracted: {features != null}");
 
 			if (features != null)
 			{
@@ -73,51 +110,60 @@ public class FingerprintEnroll : DPFP.Capture.EventHandler, IDisposable
 				var progress = Math.Min(100, (4 - (int)needed) * 25);
 				lastQuality = 85.0;
 				OnSampleProcessed?.Invoke(progress, "scanning", needed > 0 ? $"Lift and place finger again... ({needed} more)" : "Processing...");
+				Log($"FeaturesNeeded={needed} Status={status} Progress={progress}");
 
 				if (status == Enrollment.Status.Ready)
 				{
 					OnSampleProcessed?.Invoke(85, "processing", "Processing template...");
 					resultTemplate = enrollment.Template;
+					try { capture.StopCapture(); } catch { }
 					sampleEvent.Set();
+					Log("Template READY -> sampleEvent.Set()");
 				}
 				else if (status == Enrollment.Status.Failed)
 				{
 					enrollment.Clear();
 					fingerDetected = false;
 					OnSampleProcessed?.Invoke(0, "waiting", "Enrollment failed. Please try again.");
+					Log("Enrollment FAILED -> cleared");
 				}
 			}
 			else
 			{
 				OnSampleProcessed?.Invoke(25, "scanning", "Poor quality scan, please try again...");
+				Log("Feature extraction returned null (poor quality)");
 			}
 		}
 		catch (Exception ex)
 		{
-			System.Diagnostics.Debug.WriteLine($"OnComplete error: {ex.Message}");
+			Log($"OnComplete error: {ex.Message}");
 			OnSampleProcessed?.Invoke(0, "failed", "Fingerprint processing error occurred.");
 		}
 	}
 
 	public void OnFingerTouch(object c, string s)
 	{
+		Log($"OnFingerTouch - fingerDetected={fingerDetected}");
 		if (!fingerDetected)
 		{
 			OnSampleProcessed?.Invoke(5, "scanning", "Finger detected on scanner...");
+			Log("OnFingerTouch - finger detected, updating UI");
 		}
 	}
 
 	public void OnFingerGone(object c, string s)
 	{
+		Log($"OnFingerGone - fingerDetected={fingerDetected}, status={enrollment.TemplateStatus}");
 		if (fingerDetected && enrollment.TemplateStatus != Enrollment.Status.Ready)
 		{
 			OnSampleProcessed?.Invoke(0, "waiting", "Place your finger back on the scanner...");
+			Log("OnFingerGone - finger removed, prompting user");
 		}
 	}
 
-	public void OnReaderConnect(object c, string s) { }
-	public void OnReaderDisconnect(object c, string s) { }
-	public void OnSampleQuality(object c, string s, CaptureFeedback f) { }
+	public void OnReaderConnect(object c, string s) { Log("OnReaderConnect"); }
+	public void OnReaderDisconnect(object c, string s) { Log("OnReaderDisconnect"); }
+	public void OnSampleQuality(object c, string s, CaptureFeedback f) { Log($"OnSampleQuality: {f}"); }
 
 	private FeatureSet ExtractFeatures(Sample sample, DataPurpose purpose)
 	{
@@ -135,14 +181,23 @@ public class FingerprintEnroll : DPFP.Capture.EventHandler, IDisposable
 		fingerDetected = false;
 		enrollment.Clear();
 
+		Log($"TryEnroll start timeoutMs={timeoutMs}");
+		
+		// Show the hidden form to establish message loop context
+		hiddenForm.Show();
+		Application.DoEvents(); // Process the form creation
+		
 		Start();
 		try
 		{
-			var checkInterval = 100;
+			var checkInterval = 50; // Faster polling
 			var elapsed = 0;
 			while (elapsed < timeoutMs)
 			{
-				if (sampleEvent.WaitOne(checkInterval))
+				// Critical: Pump Windows messages for DPFP callbacks
+				Application.DoEvents();
+				
+				if (sampleEvent.WaitOne(0))
 				{
 					if (resultTemplate != null)
 					{
@@ -151,16 +206,22 @@ public class FingerprintEnroll : DPFP.Capture.EventHandler, IDisposable
 							resultTemplate.Serialize(ms);
 							templateBytes = ms.ToArray();
 						}
+						Log($"TryEnroll SUCCESS at {elapsed}ms, bytes={templateBytes?.Length}");
 						return true;
 					}
 				}
+				Thread.Sleep(checkInterval);
 				elapsed += checkInterval;
+				if (elapsed % 1000 == 0) Log($"waiting... elapsed={elapsed}ms");
 			}
+			Log("TryEnroll TIMEOUT");
 			return false;
 		}
 		finally
 		{
 			Stop();
+			hiddenForm.Hide();
+			Log("TryEnroll end");
 		}
 	}
 }

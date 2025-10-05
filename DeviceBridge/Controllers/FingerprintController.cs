@@ -4,6 +4,7 @@ using System.Web.Http;
 using DeviceBridge.Services;
 using System.Threading;
 using System.Windows.Forms;
+using System.Collections.Concurrent;
 
 namespace DeviceBridge.Controllers
 {
@@ -11,50 +12,101 @@ namespace DeviceBridge.Controllers
 	public class FingerprintController : ApiController
 	{
 		private static readonly System.Threading.SemaphoreSlim _deviceLock = new System.Threading.SemaphoreSlim(1, 1);
+		private static readonly ConcurrentDictionary<string, ProgressState> _progress = new ConcurrentDictionary<string, ProgressState>();
 
-		[HttpPost, Route("enroll")]
-		public IHttpActionResult Enroll()
+		private class ProgressState
 		{
-			byte[] tpl = null;
-			bool ok = false;
-			Exception workerEx = null;
-			var corrId = Guid.NewGuid().ToString("N").Substring(0, 8);
-			System.Diagnostics.Debug.WriteLine($"[Enroll {corrId}] start");
+			public int Progress { get; set; }
+			public string Phase { get; set; }
+			public string Message { get; set; }
+			public int? ScansLeft { get; set; }
+			public byte[] Template { get; set; }
+			public DateTime UpdatedUtc { get; set; } = DateTime.UtcNow;
+		}
+
+		[HttpPost, Route("enroll/start")]
+		public IHttpActionResult EnrollStart()
+		{
+			var sessionId = Guid.NewGuid().ToString("N").Substring(0, 8);
+			_progress[sessionId] = new ProgressState { Progress = 0, Phase = "waiting", Message = "Initializing...", ScansLeft = null };
 
 			try
 			{
 				// Ensure exclusive access to the device
 				_deviceLock.Wait();
 
-				ok = WinFormsPump.EnrollWithPump(() =>
+				ThreadPool.QueueUserWorkItem(state =>
 				{
-					using (var en = new FingerprintEnroll())
+					try
 					{
-						var okEnroll = en.TryEnroll(30_000, out var templateBytes);
-						return (okEnroll, templateBytes);
-					}
-				}, out tpl);
+						using (var en = new FingerprintEnroll())
+						{
+							en.OnSampleProcessed += (p, phase, msg, left) =>
+							{
+								_progress.AddOrUpdate(sessionId,
+									key => new ProgressState { Progress = p, Phase = phase, Message = msg, ScansLeft = left, UpdatedUtc = DateTime.UtcNow },
+									(key, s) => { s.Progress = p; s.Phase = phase; s.Message = msg; s.ScansLeft = left; s.UpdatedUtc = DateTime.UtcNow; return s; });
+							};
 
-				if (workerEx != null) throw workerEx;
-				if (!ok || tpl == null)
-				{
-					System.Diagnostics.Debug.WriteLine($"[Enroll {corrId}] failed (timeout or null template)");
-					return BadRequest("Enrollment timed out or failed.");
-				}
-				var b64 = Convert.ToBase64String(tpl);
-				System.Diagnostics.Debug.WriteLine($"[Enroll {corrId}] success bytes={tpl.Length}");
-				return Ok(new { template = b64, format = "DPFP", quality = (int?)null });
+							var okEnroll = en.TryEnroll(30_000, out var templateBytes);
+							if (okEnroll && templateBytes != null)
+							{
+								_progress.AddOrUpdate(sessionId,
+									key => new ProgressState { Progress = 100, Phase = "done", Message = "Enrollment complete", ScansLeft = 0, Template = templateBytes, UpdatedUtc = DateTime.UtcNow },
+									(key, s) => { s.Progress = 100; s.Phase = "done"; s.Message = "Enrollment complete"; s.ScansLeft = 0; s.Template = templateBytes; s.UpdatedUtc = DateTime.UtcNow; return s; });
+							}
+							else
+							{
+								_progress.AddOrUpdate(sessionId,
+									key => new ProgressState { Progress = 0, Phase = "failed", Message = "Enrollment failed or timed out", ScansLeft = null, Template = null, UpdatedUtc = DateTime.UtcNow },
+									(key, s) => { s.Progress = 0; s.Phase = "failed"; s.Message = "Enrollment failed or timed out"; s.ScansLeft = null; s.Template = null; s.UpdatedUtc = DateTime.UtcNow; return s; });
+							}
+						}
+					}
+					catch (Exception ex)
+					{
+						_progress.AddOrUpdate(sessionId,
+							key => new ProgressState { Progress = 0, Phase = "failed", Message = ex.Message, ScansLeft = null, Template = null, UpdatedUtc = DateTime.UtcNow },
+							(key, s) => { s.Progress = 0; s.Phase = "failed"; s.Message = ex.Message; s.ScansLeft = null; s.Template = null; s.UpdatedUtc = DateTime.UtcNow; return s; });
+					}
+					finally
+					{
+						try { _deviceLock.Release(); } catch { }
+					}
+				});
+
+				return Ok(new { sessionId });
 			}
 			catch (Exception ex)
 			{
-				System.Diagnostics.Debug.WriteLine($"[Enroll {corrId}] exception: {ex.Message}");
+				try { _deviceLock.Release(); } catch { }
 				return BadRequest(ex.Message);
 			}
-			finally
+		}
+
+		[HttpGet, Route("enroll/progress/{sessionId}")]
+		public IHttpActionResult EnrollProgress(string sessionId)
+		{
+			if (string.IsNullOrWhiteSpace(sessionId)) return BadRequest("sessionId required");
+			if (_progress.TryGetValue(sessionId, out var st))
 			{
-				try { _deviceLock.Release(); } catch { }
-				System.Diagnostics.Debug.WriteLine($"[Enroll {corrId}] end");
+				return Ok(new { progress = st.Progress, phase = st.Phase, message = st.Message, scansLeft = st.ScansLeft, done = st.Phase == "done", failed = st.Phase == "failed" });
 			}
+			return Ok(new { progress = 0, phase = "waiting", message = "No updates yet", scansLeft = (int?)null, done = false, failed = false });
+		}
+
+		[HttpPost, Route("enroll/finish/{sessionId}")]
+		public IHttpActionResult EnrollFinish(string sessionId)
+		{
+			if (string.IsNullOrWhiteSpace(sessionId)) return BadRequest("sessionId required");
+			if (_progress.TryGetValue(sessionId, out var st))
+			{
+				if (st.Template == null) return BadRequest("Enrollment not complete");
+				var b64 = Convert.ToBase64String(st.Template);
+				_progress.TryRemove(sessionId, out _);
+				return Ok(new { template = b64, format = "DPFP" });
+			}
+			return BadRequest("Unknown sessionId");
 		}
 
 		// Removed old DoEvents loop; enrollment now runs under a real WinForms pump
@@ -159,6 +211,67 @@ namespace DeviceBridge.Controllers
 			catch (Exception ex)
 			{
 				return BadRequest($"Finger detection test failed: {ex.Message}");
+			}
+		}
+
+		[HttpGet, Route("test/system-tray")]
+		public IHttpActionResult TestSystemTray()
+		{
+			var systemTrayActive = SystemTrayBridge.Current != null;
+			
+			return Ok(new { 
+				message = "System Tray Application Test",
+				systemTrayActive = systemTrayActive,
+				instructions = new[] {
+					"1. Stop the current console application",
+					"2. Run: DeviceBridge.exe tray",
+					"3. Look for the system tray icon",
+					"4. Right-click the icon for options",
+					"5. Test fingerprint enrollment while other apps are in focus"
+				},
+				benefits = new[] {
+					"Works without application focus",
+					"Always-on-top window for device events",
+					"System tray access for easy management",
+					"Better reliability for fingerprint operations",
+					"Automatic focus maintenance every 30 seconds"
+				},
+				commands = new {
+					consoleMode = "DeviceBridge.exe",
+					trayMode = "DeviceBridge.exe tray",
+					help = "DeviceBridge.exe help"
+				},
+				currentStatus = systemTrayActive ? "System tray bridge is active" : "System tray bridge is not active"
+			});
+		}
+
+		[HttpGet, Route("test/focus")]
+		public IHttpActionResult TestFocus()
+		{
+			try
+			{
+				var systemTrayBridge = SystemTrayBridge.Current;
+				if (systemTrayBridge != null)
+				{
+					systemTrayBridge.EnsureFocus();
+					return Ok(new { 
+						message = "Focus ensured for fingerprint operations",
+						systemTrayActive = true,
+						note = "Hidden window has been brought to foreground and activated"
+					});
+				}
+				else
+				{
+					return Ok(new { 
+						message = "System tray bridge not active",
+						systemTrayActive = false,
+						note = "Run in tray mode for enhanced focus handling"
+					});
+				}
+			}
+			catch (Exception ex)
+			{
+				return BadRequest($"Focus test failed: {ex.Message}");
 			}
 		}
 	}

@@ -75,6 +75,22 @@ namespace DeviceBridge.Services
 			tpl = tplLocal;
 			return resultLocal;
 		}
+
+		public static void RunOnPump(Action action)
+		{
+			EnsureStarted();
+			_invoker.BeginInvoke(new MethodInvoker(() =>
+			{
+				try
+				{
+					action?.Invoke();
+				}
+				catch
+				{
+					// swallow to avoid killing pump thread
+				}
+			}));
+		}
 	}
 }
 

@@ -8,7 +8,7 @@ using DPFP.Processing;
 
 public class FingerprintEnroll : DPFP.Capture.EventHandler, IDisposable
 {
-	private readonly Capture capture;
+    private readonly Capture capture;
 	private readonly Enrollment enrollment;
 	private readonly AutoResetEvent sampleEvent = new AutoResetEvent(false);
 	private Template resultTemplate;
@@ -35,8 +35,27 @@ public class FingerprintEnroll : DPFP.Capture.EventHandler, IDisposable
 		hiddenForm.Visible = false;
 		hiddenForm.Load += (s, e) => { Log("Hidden form loaded"); };
 		
-		capture = new Capture();
-		capture.EventHandler = this;
+        try
+        {
+            var readers = new ReadersCollection();
+            if (readers != null && readers.Count > 0)
+            {
+                var serial = readers[0].SerialNumber;
+                Log($"Using reader: {serial}");
+                capture = new Capture(serial);
+            }
+            else
+            {
+                Log("No readers found via ReadersCollection; falling back to default Capture()");
+                capture = new Capture();
+            }
+        }
+        catch
+        {
+            Log("ReadersCollection failed; falling back to default Capture()");
+            capture = new Capture();
+        }
+        capture.EventHandler = this;
 		enrollment = new Enrollment();
 		
 		// Note: Sensitivity adjustment not available in this DPFP version
@@ -162,8 +181,15 @@ public class FingerprintEnroll : DPFP.Capture.EventHandler, IDisposable
 	}
 
 	public void OnReaderConnect(object c, string s) { Log("OnReaderConnect"); }
-	public void OnReaderDisconnect(object c, string s) { Log("OnReaderDisconnect"); }
-	public void OnSampleQuality(object c, string s, CaptureFeedback f) { Log($"OnSampleQuality: {f}"); }
+    public void OnReaderDisconnect(object c, string s) { Log("OnReaderDisconnect"); }
+    public void OnSampleQuality(object c, string s, CaptureFeedback f)
+    {
+        Log($"OnSampleQuality: {f}");
+        if (f == CaptureFeedback.Good)
+        {
+            OnSampleProcessed?.Invoke(50, "scanning", "Good quality detected");
+        }
+    }
 
 	private FeatureSet ExtractFeatures(Sample sample, DataPurpose purpose)
 	{

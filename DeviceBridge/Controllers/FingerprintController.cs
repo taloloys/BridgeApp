@@ -26,26 +26,14 @@ namespace DeviceBridge.Controllers
 				// Ensure exclusive access to the device
 				_deviceLock.Wait();
 
-				var t = new Thread(() =>
+				ok = WinFormsPump.EnrollWithPump(() =>
 				{
-					try
+					using (var en = new FingerprintEnroll())
 					{
-						// Create a proper Windows message loop in STA thread
-						using (var enroller = new FingerprintEnroll())
-						{
-							// Run enrollment with message loop
-							ok = RunEnrollmentWithMessageLoop(enroller, 30_000, out tpl);
-						}
+						var okEnroll = en.TryEnroll(30_000, out var templateBytes);
+						return (okEnroll, templateBytes);
 					}
-					catch (Exception ex)
-					{
-						workerEx = ex;
-					}
-				});
-				try { t.SetApartmentState(ApartmentState.STA); } catch { }
-				t.IsBackground = true;
-				t.Start();
-				t.Join();
+				}, out tpl);
 
 				if (workerEx != null) throw workerEx;
 				if (!ok || tpl == null)
@@ -69,41 +57,7 @@ namespace DeviceBridge.Controllers
 			}
 		}
 
-		private bool RunEnrollmentWithMessageLoop(FingerprintEnroll enroller, int timeoutMs, out byte[] templateBytes)
-		{
-			templateBytes = null;
-			var result = false;
-			var startTime = DateTime.Now;
-			
-			// Start enrollment
-			enroller.Start();
-			
-			try
-			{
-				// Run a proper Windows message loop
-				while ((DateTime.Now - startTime).TotalMilliseconds < timeoutMs)
-				{
-					// Process Windows messages
-					Application.DoEvents();
-					
-					// Check if enrollment completed
-					if (enroller.IsComplete(out templateBytes))
-					{
-						result = true;
-						break;
-					}
-					
-					// Small delay to prevent 100% CPU
-					Thread.Sleep(10);
-				}
-			}
-			finally
-			{
-				enroller.Stop();
-			}
-			
-			return result;
-		}
+		// Removed old DoEvents loop; enrollment now runs under a real WinForms pump
 
 		[HttpGet, Route("test/device")]
 		public IHttpActionResult TestDevice()

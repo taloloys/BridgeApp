@@ -1,4 +1,5 @@
 using System;
+using System.Windows.Forms;
 using Microsoft.Owin.Hosting;
 
 namespace DeviceBridge
@@ -8,20 +9,33 @@ namespace DeviceBridge
 		[STAThread]
 		private static void Main(string[] args)
 		{
+			// Enable visual styles for WinForms
+			Application.EnableVisualStyles();
+			Application.SetCompatibleTextRenderingDefault(false);
+
 			// Check command line arguments
-			if (args.Length > 0 && args[0].ToLower() == "tray")
-			{
-				RunAsSystemTray();
-				return;
-			}
-			else if (args.Length > 0 && args[0].ToLower() == "help")
+			if (args.Length > 0 && args[0].ToLower() == "help")
 			{
 				ShowHelp();
 				return;
 			}
 
-			// Default: Run as console application with enhanced focus handling
-			RunAsConsole();
+			// Default: Always run as WinForms application
+			RunAsWinFormsApp();
+		}
+
+		private static void RunAsWinFormsApp()
+		{
+			try
+			{
+				// Run the main WinForms application
+				Application.Run(new MainForm());
+			}
+			catch (Exception ex)
+			{
+				MessageBox.Show($"Error starting WinForms application: {ex.Message}", 
+					"Device Bridge Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+			}
 		}
 
 		private static void RunAsConsole()
@@ -202,25 +216,17 @@ namespace DeviceBridge
 
 		private static void ShowHelp()
 		{
-			Console.WriteLine("Device Bridge - Fingerprint Service");
-			Console.WriteLine("==================================");
-			Console.WriteLine();
-			Console.WriteLine("Usage:");
-			Console.WriteLine("  DeviceBridge.exe          - Run as console application (default)");
-			Console.WriteLine("  DeviceBridge.exe tray     - Run as system tray application");
-			Console.WriteLine("  DeviceBridge.exe help     - Show this help");
-			Console.WriteLine();
-			Console.WriteLine("Console Mode:");
-			Console.WriteLine("  - Traditional console application");
-			Console.WriteLine("  - Enhanced focus handling enabled");
-			Console.WriteLine("  - Press 'T' to minimize to system tray");
-			Console.WriteLine("  - May require application focus for optimal performance");
-			Console.WriteLine();
-			Console.WriteLine("System Tray Mode:");
-			Console.WriteLine("  - Runs in background with system tray icon");
-			Console.WriteLine("  - Better focus handling for fingerprint operations");
-			Console.WriteLine("  - Right-click tray icon for options");
-			Console.WriteLine("  - Works even when other applications are in focus");
+			MessageBox.Show("Device Bridge - Fingerprint Service\n\n" +
+				"Usage:\n" +
+				"  DeviceBridge.exe          - Run as WinForms application (default)\n" +
+				"  DeviceBridge.exe help     - Show this help\n\n" +
+				"WinForms Mode:\n" +
+				"  - Modern graphical user interface\n" +
+				"  - Can minimize to system tray\n" +
+				"  - User-friendly controls and status display\n" +
+				"  - Web interface integration\n" +
+				"  - Better integration with Windows",
+				"Device Bridge Help", MessageBoxButtons.OK, MessageBoxIcon.Information);
 		}
 
 		// Windows API for console window management

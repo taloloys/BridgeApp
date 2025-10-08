@@ -29,7 +29,7 @@ namespace DeviceBridge
             {
                 MessageBox.Show($"Error initializing MainForm: {ex.Message}\n\nStack trace:\n{ex.StackTrace}", 
                     "MainForm Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                throw; // Re-throw to be caught by Program.cs
+                throw;
             }
         }
 
@@ -37,26 +37,21 @@ namespace DeviceBridge
         {
             _trayIcon = new NotifyIcon()
             {
-                Icon = SystemIcons.Application, // You can replace with a custom icon
+                Icon = SystemIcons.Application, 
                 ContextMenuStrip = new ContextMenuStrip(),
                 Visible = true,
                 Text = "Device Bridge - Fingerprint Service"
             };
 
-            // Create context menu
+
             var showMenuItem = new ToolStripMenuItem("Show Main Window", null, OnShowMainWindow);
-            var hideMenuItem = new ToolStripMenuItem("Hide to Tray", null, OnHideToTray);
-            var restartMenuItem = new ToolStripMenuItem("Restart Service", null, OnRestartService);
             var exitMenuItem = new ToolStripMenuItem("Exit", null, OnExit);
 
             _trayIcon.ContextMenuStrip.Items.Add(showMenuItem);
-            _trayIcon.ContextMenuStrip.Items.Add(hideMenuItem);
-            _trayIcon.ContextMenuStrip.Items.Add(new ToolStripSeparator());
-            _trayIcon.ContextMenuStrip.Items.Add(restartMenuItem);
             _trayIcon.ContextMenuStrip.Items.Add(new ToolStripSeparator());
             _trayIcon.ContextMenuStrip.Items.Add(exitMenuItem);
 
-            // Double-click to show main window
+
             _trayIcon.DoubleClick += OnShowMainWindow;
         }
 
@@ -64,7 +59,7 @@ namespace DeviceBridge
         {
             try
             {
-                // Start web server in background task
+
                 _webServerTask = Task.Run(() =>
                 {
                     var ports = new[] { 18420, 18421, 18422, 18423, 18424 };
@@ -78,7 +73,7 @@ namespace DeviceBridge
                             {
                                 _currentServerUrl = url;
                                 
-                                // Update status on main thread
+                          
                                 this.Invoke(new Action(() =>
                                 {
                                     StatusLabel.Text = $"Web server running at {url}";
@@ -86,7 +81,7 @@ namespace DeviceBridge
                                     ServerUrlLabel.Text = url;
                                 }));
 
-                                // Keep the web server running
+                     
                                 System.Threading.Thread.Sleep(System.Threading.Timeout.Infinite);
                             }
                         }
@@ -138,16 +133,15 @@ namespace DeviceBridge
 
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
-            // If user is closing the form, minimize to tray instead of actually closing
+            
             if (e.CloseReason == CloseReason.UserClosing)
             {
-                e.Cancel = true;
-                HideToTray();
-            }
-            else
-            {
-                // Clean up resources
-                _trayIcon?.Dispose();
+                if (MessageBox.Show("Are you sure you want to exit Device Bridge?", 
+                    "Exit Application", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.No)
+                {
+                    e.Cancel = true; 
+                    return;
+                }
             }
         }
 
@@ -157,7 +151,6 @@ namespace DeviceBridge
             this.Hide();
             this.WindowState = FormWindowState.Normal; // Reset window state
             
-            // Show notification
             _trayIcon.ShowBalloonTip(3000, "Device Bridge", 
                 "Application minimized to system tray. Right-click the tray icon to restore.", 
                 ToolTipIcon.Info);
@@ -172,7 +165,6 @@ namespace DeviceBridge
             this.Activate();
         }
 
-        // Tray icon event handlers
         private void OnShowMainWindow(object sender, EventArgs e)
         {
             ShowFromTray();
@@ -183,11 +175,7 @@ namespace DeviceBridge
             HideToTray();
         }
 
-        private void OnRestartService(object sender, EventArgs e)
-        {
-            MessageBox.Show("Service restart functionality would be implemented here.", 
-                "Restart Service", MessageBoxButtons.OK, MessageBoxIcon.Information);
-        }
+       
 
         private void OnExit(object sender, EventArgs e)
         {

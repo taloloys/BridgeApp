@@ -191,5 +191,10 @@
     <Content Include="Digital Persona\DPFPShrNET.dll" />
     <Content Include="Digital Persona\DPFPVerNET.dll" />
   </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="MainForm.resx">
+      <DependentUpon>MainForm.cs</DependentUpon>
+    </EmbeddedResource>
+  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

@@ -28,16 +28,12 @@ namespace DeviceBridge
         /// </summary>
         private void InitializeComponent()
         {
-            this.components = new System.ComponentModel.Container();
             this.StatusLabel = new System.Windows.Forms.Label();
-            this.MinimizeToTrayButton = new System.Windows.Forms.Button();
-            this.TestFingerprintButton = new System.Windows.Forms.Button();
-            this.SettingsButton = new System.Windows.Forms.Button();
-            this.AboutButton = new System.Windows.Forms.Button();
             this.TitleLabel = new System.Windows.Forms.Label();
             this.StatusGroupBox = new System.Windows.Forms.GroupBox();
             this.ServerUrlLabel = new System.Windows.Forms.Label();
-            this.OpenWebInterfaceButton = new System.Windows.Forms.Button();
+            this.AboutButton = new System.Windows.Forms.Button();
+            this.MinimizeToTrayButton = new System.Windows.Forms.Button();
             this.ActionsGroupBox = new System.Windows.Forms.GroupBox();
             this.StatusGroupBox.SuspendLayout();
             this.ActionsGroupBox.SuspendLayout();
@@ -49,49 +45,9 @@ namespace DeviceBridge
             this.StatusLabel.Font = new System.Drawing.Font("Microsoft Sans Serif", 9F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
             this.StatusLabel.Location = new System.Drawing.Point(15, 25);
             this.StatusLabel.Name = "StatusLabel";
-            this.StatusLabel.Size = new System.Drawing.Size(200, 15);
+            this.StatusLabel.Size = new System.Drawing.Size(150, 15);
             this.StatusLabel.TabIndex = 0;
             this.StatusLabel.Text = "Initializing Device Bridge...";
-            // 
-            // MinimizeToTrayButton
-            // 
-            this.MinimizeToTrayButton.Location = new System.Drawing.Point(15, 25);
-            this.MinimizeToTrayButton.Name = "MinimizeToTrayButton";
-            this.MinimizeToTrayButton.Size = new System.Drawing.Size(120, 30);
-            this.MinimizeToTrayButton.TabIndex = 1;
-            this.MinimizeToTrayButton.Text = "Minimize to Tray";
-            this.MinimizeToTrayButton.UseVisualStyleBackColor = true;
-            this.MinimizeToTrayButton.Click += new System.EventHandler(this.MinimizeToTrayButton_Click);
-            // 
-            // TestFingerprintButton
-            // 
-            this.TestFingerprintButton.Location = new System.Drawing.Point(15, 70);
-            this.TestFingerprintButton.Name = "TestFingerprintButton";
-            this.TestFingerprintButton.Size = new System.Drawing.Size(120, 30);
-            this.TestFingerprintButton.TabIndex = 2;
-            this.TestFingerprintButton.Text = "Test Fingerprint";
-            this.TestFingerprintButton.UseVisualStyleBackColor = true;
-            this.TestFingerprintButton.Click += new System.EventHandler(this.TestFingerprintButton_Click);
-            // 
-            // SettingsButton
-            // 
-            this.SettingsButton.Location = new System.Drawing.Point(15, 115);
-            this.SettingsButton.Name = "SettingsButton";
-            this.SettingsButton.Size = new System.Drawing.Size(120, 30);
-            this.SettingsButton.TabIndex = 3;
-            this.SettingsButton.Text = "Settings";
-            this.SettingsButton.UseVisualStyleBackColor = true;
-            this.SettingsButton.Click += new System.EventHandler(this.SettingsButton_Click);
-            // 
-            // AboutButton
-            // 
-            this.AboutButton.Location = new System.Drawing.Point(15, 160);
-            this.AboutButton.Name = "AboutButton";
-            this.AboutButton.Size = new System.Drawing.Size(120, 30);
-            this.AboutButton.TabIndex = 4;
-            this.AboutButton.Text = "About";
-            this.AboutButton.UseVisualStyleBackColor = true;
-            this.AboutButton.Click += new System.EventHandler(this.AboutButton_Click);
             // 
             // TitleLabel
             // 
@@ -99,14 +55,13 @@ namespace DeviceBridge
             this.TitleLabel.Font = new System.Drawing.Font("Microsoft Sans Serif", 14F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
             this.TitleLabel.Location = new System.Drawing.Point(20, 20);
             this.TitleLabel.Name = "TitleLabel";
-            this.TitleLabel.Size = new System.Drawing.Size(200, 24);
+            this.TitleLabel.Size = new System.Drawing.Size(141, 24);
             this.TitleLabel.TabIndex = 5;
             this.TitleLabel.Text = "Device Bridge";
             // 
             // StatusGroupBox
             // 
             this.StatusGroupBox.Controls.Add(this.ServerUrlLabel);
-            this.StatusGroupBox.Controls.Add(this.OpenWebInterfaceButton);
             this.StatusGroupBox.Controls.Add(this.StatusLabel);
             this.StatusGroupBox.Location = new System.Drawing.Point(20, 60);
             this.StatusGroupBox.Name = "StatusGroupBox";
@@ -125,25 +80,33 @@ namespace DeviceBridge
             this.ServerUrlLabel.Size = new System.Drawing.Size(0, 13);
             this.ServerUrlLabel.TabIndex = 2;
             // 
-            // OpenWebInterfaceButton
+            // AboutButton
             // 
-            this.OpenWebInterfaceButton.Location = new System.Drawing.Point(15, 70);
-            this.OpenWebInterfaceButton.Name = "OpenWebInterfaceButton";
-            this.OpenWebInterfaceButton.Size = new System.Drawing.Size(150, 25);
-            this.OpenWebInterfaceButton.TabIndex = 1;
-            this.OpenWebInterfaceButton.Text = "Open Web Interface";
-            this.OpenWebInterfaceButton.UseVisualStyleBackColor = true;
-            this.OpenWebInterfaceButton.Click += new System.EventHandler(this.OpenWebInterfaceButton_Click);
+            this.AboutButton.Location = new System.Drawing.Point(15, 78);
+            this.AboutButton.Name = "AboutButton";
+            this.AboutButton.Size = new System.Drawing.Size(120, 30);
+            this.AboutButton.TabIndex = 4;
+            this.AboutButton.Text = "About";
+            this.AboutButton.UseVisualStyleBackColor = true;
+            this.AboutButton.Click += new System.EventHandler(this.AboutButton_Click);
+            // 
+            // MinimizeToTrayButton
+            // 
+            this.MinimizeToTrayButton.Location = new System.Drawing.Point(15, 25);
+            this.MinimizeToTrayButton.Name = "MinimizeToTrayButton";
+            this.MinimizeToTrayButton.Size = new System.Drawing.Size(120, 30);
+            this.MinimizeToTrayButton.TabIndex = 1;
+            this.MinimizeToTrayButton.Text = "Minimize to Tray";
+            this.MinimizeToTrayButton.UseVisualStyleBackColor = true;
+            this.MinimizeToTrayButton.Click += new System.EventHandler(this.MinimizeToTrayButton_Click);
             // 
             // ActionsGroupBox
             // 
             this.ActionsGroupBox.Controls.Add(this.MinimizeToTrayButton);
-            this.ActionsGroupBox.Controls.Add(this.TestFingerprintButton);
-            this.ActionsGroupBox.Controls.Add(this.SettingsButton);
             this.ActionsGroupBox.Controls.Add(this.AboutButton);
             this.ActionsGroupBox.Location = new System.Drawing.Point(20, 180);
             this.ActionsGroupBox.Name = "ActionsGroupBox";
-            this.ActionsGroupBox.Size = new System.Drawing.Size(400, 210);
+            this.ActionsGroupBox.Size = new System.Drawing.Size(400, 133);
             this.ActionsGroupBox.TabIndex = 7;
             this.ActionsGroupBox.TabStop = false;
             this.ActionsGroupBox.Text = "Actions";
@@ -152,7 +115,7 @@ namespace DeviceBridge
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(450, 420);
+            this.ClientSize = new System.Drawing.Size(450, 336);
             this.Controls.Add(this.ActionsGroupBox);
             this.Controls.Add(this.StatusGroupBox);
             this.Controls.Add(this.TitleLabel);
@@ -172,14 +135,11 @@ namespace DeviceBridge
         #endregion
 
         private System.Windows.Forms.Label StatusLabel;
-        private System.Windows.Forms.Button MinimizeToTrayButton;
-        private System.Windows.Forms.Button TestFingerprintButton;
-        private System.Windows.Forms.Button SettingsButton;
-        private System.Windows.Forms.Button AboutButton;
         private System.Windows.Forms.Label TitleLabel;
         private System.Windows.Forms.GroupBox StatusGroupBox;
-        private System.Windows.Forms.GroupBox ActionsGroupBox;
         private System.Windows.Forms.Label ServerUrlLabel;
-        private System.Windows.Forms.Button OpenWebInterfaceButton;
+        private System.Windows.Forms.Button AboutButton;
+        private System.Windows.Forms.Button MinimizeToTrayButton;
+        private System.Windows.Forms.GroupBox ActionsGroupBox;
     }
 }

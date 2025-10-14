@@ -4,6 +4,8 @@ using System.Windows.Forms;
 using Microsoft.Owin.Hosting;
 using System.Threading.Tasks;
 
+
+
 namespace DeviceBridge
 {
     /// <summary>
@@ -14,6 +16,7 @@ namespace DeviceBridge
     {
         private NotifyIcon _trayIcon;
         private bool _isMinimizedToTray = false;
+
         private Task _webServerTask;
         private string _currentServerUrl = "";
 
@@ -22,6 +25,7 @@ namespace DeviceBridge
             try
             {
                 InitializeComponent();
+                this.Icon = new Icon("Images/Gemini_Generated_Image_jlm5pbjlm5pbjlm5.ico"); // Use correct relative path
                 InitializeTrayIcon();
                 InitializeWebServer();
             }
@@ -37,7 +41,7 @@ namespace DeviceBridge
         {
             _trayIcon = new NotifyIcon()
             {
-                Icon = SystemIcons.Application, 
+                Icon = new Icon("Images/Gemini_Generated_Image_jlm5pbjlm5pbjlm5.ico"), // Use correct relative path
                 ContextMenuStrip = new ContextMenuStrip(),
                 Visible = true,
                 Text = "Device Bridge - Fingerprint Service"

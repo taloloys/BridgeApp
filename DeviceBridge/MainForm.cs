@@ -3,6 +3,7 @@ using System.Drawing;
 using System.Windows.Forms;
 using Microsoft.Owin.Hosting;
 using System.Threading.Tasks;
+using System.Reflection;
 
 
 
@@ -22,26 +23,34 @@ namespace DeviceBridge
 
         public MainForm()
         {
+            InitializeComponent();
+
+            // Set window icon with safe fallback to avoid startup crashes if resource is unavailable
             try
             {
-                InitializeComponent();
-                this.Icon = new Icon("Images/Gemini_Generated_Image_jlm5pbjlm5pbjlm5.ico"); // Use correct relative path
-                InitializeTrayIcon();
-                InitializeWebServer();
+                this.Icon = Properties.Resources.AppIcon;
             }
-            catch (Exception ex)
+            catch
             {
-                MessageBox.Show($"Error initializing MainForm: {ex.Message}\n\nStack trace:\n{ex.StackTrace}", 
-                    "MainForm Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                throw;
+                this.Icon = SystemIcons.Application;
             }
+
+            InitializeTrayIcon();
+            InitializeWebServer();
         }
 
         private void InitializeTrayIcon()
         {
+            var trayIcon = SystemIcons.Application;
+            try
+            {
+                trayIcon = Properties.Resources.AppIcon;
+            }
+            catch { }
+
             _trayIcon = new NotifyIcon()
             {
-                Icon = new Icon("Images/Gemini_Generated_Image_jlm5pbjlm5pbjlm5.ico"), // Use correct relative path
+                Icon = trayIcon,
                 ContextMenuStrip = new ContextMenuStrip(),
                 Visible = true,
                 Text = "Device Bridge - Fingerprint Service"
@@ -198,21 +207,10 @@ namespace DeviceBridge
             HideToTray();
         }
 
-        private void TestFingerprintButton_Click(object sender, EventArgs e)
-        {
-            MessageBox.Show("Fingerprint test functionality would be implemented here.", 
-                "Test Fingerprint", MessageBoxButtons.OK, MessageBoxIcon.Information);
-        }
-
-        private void SettingsButton_Click(object sender, EventArgs e)
-        {
-            MessageBox.Show("Settings dialog would be implemented here.", 
-                "Settings", MessageBoxButtons.OK, MessageBoxIcon.Information);
-        }
 
         private void AboutButton_Click(object sender, EventArgs e)
         {
-            MessageBox.Show("Device Bridge v1.0\n\nFingerprint Device Service\n\n" +
+            MessageBox.Show("Device Bridge v1.0.3\n\nFingerprint Device Service\n\n" +
                 "This application provides a bridge between fingerprint devices and web applications.", 
                 "About Device Bridge", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }

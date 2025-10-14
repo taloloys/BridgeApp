@@ -178,6 +178,13 @@
     <Compile Include="Models\EnrollmentModels.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Properties\Resources.Designer.cs">
+      <AutoGen>True</AutoGen>
+      <DesignTime>True</DesignTime>
+      <DependentUpon>Resources.resx</DependentUpon>
+    </Compile>
+    <Compile Include="Services\AssemblyResolver.cs" />
+    <Compile Include="Services\DeviceDiagnostics.cs" />
     <Compile Include="Services\FingerprintEnroll.cs" />
     <Compile Include="Services\WinFormsPump.cs" />
     <Compile Include="Services\FingerprintService.cs" />
@@ -190,11 +197,21 @@
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
-    <Content Include="Digital Persona\DPFPDevNET.dll" />
-    <Content Include="Digital Persona\DPFPEngNET.dll" />
-    <Content Include="Digital Persona\DPFPGuiNET.dll" />
-    <Content Include="Digital Persona\DPFPShrNET.dll" />
-    <Content Include="Digital Persona\DPFPVerNET.dll" />
+    <Content Include="Digital Persona\DPFPDevNET.dll">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Digital Persona\DPFPEngNET.dll">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Digital Persona\DPFPGuiNET.dll">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Digital Persona\DPFPShrNET.dll">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Digital Persona\DPFPVerNET.dll">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
     <Content Include="Images\Gemini_Generated_Image_jlm5pbjlm5pbjlm5.ico">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
@@ -203,6 +220,17 @@
     <EmbeddedResource Include="MainForm.resx">
       <DependentUpon>MainForm.cs</DependentUpon>
     </EmbeddedResource>
+    <EmbeddedResource Include="Properties\Resources.resx">
+      <Generator>ResXFileCodeGenerator</Generator>
+      <LastGenOutput>Resources.Designer.cs</LastGenOutput>
+    </EmbeddedResource>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+  <Target Name="PostBuild" AfterTargets="PostBuildEvent">
+    <ItemGroup>
+      <DigitalPersonaFiles Include="Digital Persona\*.dll" />
+    </ItemGroup>
+    <Copy SourceFiles="@(DigitalPersonaFiles)" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" />
+    <Message Text="Copied Digital Persona DLLs to $(OutputPath)" Importance="high" />
+  </Target>
 </Project>

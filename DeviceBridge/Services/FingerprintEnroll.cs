@@ -54,6 +54,11 @@ namespace DeviceBridge.Services
         hiddenForm.Location = new System.Drawing.Point(-32000, -32000);
         hiddenForm.Opacity = 0.01;
         hiddenForm.Load += (s, e) => { var handle = hiddenForm.Handle; Log("Hidden form loaded"); };
+        
+        // Ensure the form is created and visible for proper message loop
+        hiddenForm.Show();
+        var _ = hiddenForm.Handle; // Force handle creation
+        Application.DoEvents();
 		
         try
         {
@@ -70,9 +75,9 @@ namespace DeviceBridge.Services
                 capture = new Capture();
             }
         }
-        catch
+        catch (Exception ex)
         {
-            Log("ReadersCollection failed; falling back to default Capture()");
+            Log($"ReadersCollection failed: {ex.Message}; falling back to default Capture()");
             capture = new Capture();
         }
         capture.EventHandler = this;
@@ -228,16 +233,14 @@ namespace DeviceBridge.Services
 
 		Log($"TryEnroll start timeoutMs={timeoutMs}");
 		
-        // Show the hidden form to establish message loop context (ensure HWND exists)
-        hiddenForm.Show();
-        var _ = hiddenForm.Handle; // force handle creation
-        Application.DoEvents();
-        
-        // Try to ensure window focus for better device response
+        // Ensure the hidden form is visible and has focus for proper message loop
         try
         {
+            hiddenForm.Show();
+            var _ = hiddenForm.Handle; // force handle creation
             hiddenForm.BringToFront();
             hiddenForm.Activate();
+            Application.DoEvents();
             
             // If we're running in system tray mode, try to get the system tray bridge's window
             var systemTrayBridge = GetSystemTrayBridge();
@@ -246,7 +249,10 @@ namespace DeviceBridge.Services
                 systemTrayBridge.EnsureFocus();
             }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            Log($"Form focus setup failed: {ex.Message}");
+        }
 		
         Start();
 		try
@@ -257,7 +263,24 @@ namespace DeviceBridge.Services
 			{
 				// Critical: Pump Windows messages for DPFP callbacks
                 // Always pump on the message thread, even when app is not foreground
-                try { Application.DoEvents(); } catch { }
+                try 
+                { 
+                    Application.DoEvents(); 
+                    // Also try to maintain focus periodically
+                    if (elapsed % 2000 == 0) // Every 2 seconds
+                    {
+                        try
+                        {
+                            hiddenForm.BringToFront();
+                            hiddenForm.Activate();
+                        }
+                        catch { }
+                    }
+                } 
+                catch (Exception ex) 
+                { 
+                    Log($"DoEvents failed: {ex.Message}");
+                }
 				
 				if (sampleEvent.WaitOne(0))
 				{
@@ -282,7 +305,7 @@ namespace DeviceBridge.Services
 		finally
 		{
 			Stop();
-			hiddenForm.Hide();
+			try { hiddenForm.Hide(); } catch { }
 			Log("TryEnroll end");
 		}
 	}

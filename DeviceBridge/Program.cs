@@ -1,6 +1,7 @@
 using System;
 using System.Windows.Forms;
 using Microsoft.Owin.Hosting;
+using DeviceBridge.Services;
 
 namespace DeviceBridge
 {
@@ -9,6 +10,9 @@ namespace DeviceBridge
 		[STAThread]
 		private static void Main(string[] args)
 		{
+			// Initialize custom assembly resolver for Digital Persona SDK
+			AssemblyResolver.Initialize();
+			
 			// Enable visual styles for WinForms
 			Application.EnableVisualStyles();
 			Application.SetCompatibleTextRenderingDefault(false);

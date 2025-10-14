@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Web.Http;
 using DeviceBridge.Services;
 using System.Threading;
@@ -39,6 +40,20 @@ namespace DeviceBridge.Controllers
 				{
 					try
 					{
+						// Add assembly loading diagnostics
+						System.Diagnostics.Debug.WriteLine($"[EnrollStart] Starting enrollment for session {sessionId}");
+						System.Diagnostics.Debug.WriteLine($"[EnrollStart] Current directory: {System.IO.Directory.GetCurrentDirectory()}");
+						System.Diagnostics.Debug.WriteLine($"[EnrollStart] App domain base: {AppDomain.CurrentDomain.BaseDirectory}");
+						
+						// Check if Digital Persona assemblies are available
+						var assemblyPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Digital Persona");
+						if (!System.IO.Directory.Exists(assemblyPath))
+						{
+							assemblyPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "Digital Persona");
+						}
+						
+						System.Diagnostics.Debug.WriteLine($"[EnrollStart] Looking for DPFP assemblies in: {assemblyPath}");
+						
 						using (var en = new FingerprintEnroll())
 						{
 							en.OnSampleProcessed += (p, phase, msg, left) =>
@@ -65,9 +80,11 @@ namespace DeviceBridge.Controllers
 					}
 					catch (Exception ex)
 					{
+						System.Diagnostics.Debug.WriteLine($"[EnrollStart] Exception in enrollment: {ex.Message}");
+						System.Diagnostics.Debug.WriteLine($"[EnrollStart] Stack trace: {ex.StackTrace}");
 						_progress.AddOrUpdate(sessionId,
-							key => new ProgressState { Progress = 0, Phase = "failed", Message = ex.Message, ScansLeft = null, Template = null, UpdatedUtc = DateTime.UtcNow },
-							(key, s) => { s.Progress = 0; s.Phase = "failed"; s.Message = ex.Message; s.ScansLeft = null; s.Template = null; s.UpdatedUtc = DateTime.UtcNow; return s; });
+							key => new ProgressState { Progress = 0, Phase = "failed", Message = $"Enrollment error: {ex.Message}", ScansLeft = null, Template = null, UpdatedUtc = DateTime.UtcNow },
+							(key, s) => { s.Progress = 0; s.Phase = "failed"; s.Message = $"Enrollment error: {ex.Message}"; s.ScansLeft = null; s.Template = null; s.UpdatedUtc = DateTime.UtcNow; return s; });
 					}
 					finally
 					{
@@ -272,6 +289,130 @@ namespace DeviceBridge.Controllers
 			catch (Exception ex)
 			{
 				return BadRequest($"Focus test failed: {ex.Message}");
+			}
+		}
+
+		[HttpGet, Route("test/assemblies")]
+		public IHttpActionResult TestAssemblies()
+		{
+			try
+			{
+				var diagnostics = new
+				{
+					currentDirectory = System.IO.Directory.GetCurrentDirectory(),
+					appDomainBase = AppDomain.CurrentDomain.BaseDirectory,
+					executingAssembly = System.Reflection.Assembly.GetExecutingAssembly().Location,
+					loadedAssemblies = AppDomain.CurrentDomain.GetAssemblies()
+						.Where(a => a.FullName.Contains("DPFP") || a.FullName.Contains("DigitalPersona"))
+						.Select(a => new { name = a.FullName, location = a.Location, isGac = a.GlobalAssemblyCache })
+						.ToArray(),
+					digitalPersonaFolder = new
+					{
+						exists = System.IO.Directory.Exists("Digital Persona"),
+						path = System.IO.Path.GetFullPath("Digital Persona"),
+						files = System.IO.Directory.Exists("Digital Persona") ? 
+							System.IO.Directory.GetFiles("Digital Persona", "*.dll").Select(f => new { name = System.IO.Path.GetFileName(f), size = new System.IO.FileInfo(f).Length }).ToArray() : 
+							new object[0]
+					},
+					releaseMode = !System.Diagnostics.Debugger.IsAttached,
+					configuration = System.Configuration.ConfigurationManager.AppSettings["Configuration"] ?? "Unknown"
+				};
+
+				return Ok(diagnostics);
+			}
+			catch (Exception ex)
+			{
+				return BadRequest($"Assembly diagnostics failed: {ex.Message}");
+			}
+		}
+
+		[HttpGet, Route("test/troubleshoot")]
+		public IHttpActionResult TestTroubleshoot()
+		{
+			try
+			{
+				var troubleshooting = new
+				{
+					title = "Fingerprint Enrollment Troubleshooting Guide",
+					commonIssues = new[]
+					{
+						new
+						{
+							issue = "Works in Debug but not Release",
+							causes = new[]
+							{
+								"Digital Persona DLLs not copied to output directory",
+								"Assembly loading issues in release mode",
+								"Message loop context differences",
+								"Administrator privileges not properly handled"
+							},
+							solutions = new[]
+							{
+								"Check /api/fingerprint/test/assemblies endpoint",
+								"Ensure Digital Persona folder exists in output directory",
+								"Run as administrator in release mode",
+								"Use system tray mode for better reliability"
+							}
+						},
+						new
+						{
+							issue = "Works when installed but not when running from IDE",
+							causes = new[]
+							{
+								"Different working directories",
+								"Assembly resolution paths",
+								"Administrator context differences"
+							},
+							solutions = new[]
+							{
+								"Use absolute paths for assembly loading",
+								"Check current directory vs app domain base",
+								"Ensure consistent administrator privileges"
+							}
+						},
+						new
+						{
+							issue = "Fingerprint device not detected",
+							causes = new[]
+							{
+								"Device drivers not installed",
+								"Device in use by another application",
+								"USB connection issues",
+								"Digital Persona SDK not properly installed"
+							},
+							solutions = new[]
+							{
+								"Install Digital Persona SDK",
+								"Check device manager for biometric devices",
+								"Restart the application",
+								"Try different USB port"
+							}
+						}
+					},
+					diagnosticSteps = new[]
+					{
+						"1. Check /api/fingerprint/test/device - verify device detection",
+						"2. Check /api/fingerprint/test/assemblies - verify DLL loading",
+						"3. Check /api/fingerprint/test/events - verify event handling",
+						"4. Check /api/fingerprint/test/finger - verify finger detection",
+						"5. Check /api/fingerprint/test/focus - verify window focus",
+						"6. Try system tray mode: DeviceBridge.exe tray"
+					},
+					recommendedActions = new[]
+					{
+						"Always run as administrator",
+						"Use system tray mode for production",
+						"Ensure Digital Persona SDK is installed",
+						"Check Windows Event Viewer for errors",
+						"Verify device drivers are up to date"
+					}
+				};
+
+				return Ok(troubleshooting);
+			}
+			catch (Exception ex)
+			{
+				return BadRequest($"Troubleshooting guide failed: {ex.Message}");
 			}
 		}
 	}

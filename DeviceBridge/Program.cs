@@ -13,9 +13,10 @@ namespace DeviceBridge
 			// Initialize custom assembly resolver for Digital Persona SDK
 			AssemblyResolver.Initialize();
 			
-			// Enable visual styles for WinForms
+			// Enable visual styles for WinForms BEFORE creating any controls/windows
 			Application.EnableVisualStyles();
 			Application.SetCompatibleTextRenderingDefault(false);
+			
 
 			// Check command line arguments
 			if (args.Length > 0 && args[0].ToLower() == "help")
@@ -24,7 +25,7 @@ namespace DeviceBridge
 				return;
 			}
 
-			// Default: Always run as WinForms application
+ 			// Default: run MainForm (starts minimized to tray per MainForm.cs)
 			RunAsWinFormsApp();
 		}
 
@@ -110,9 +111,6 @@ namespace DeviceBridge
 
 	private static void RunAsSystemTray()
 		{
-			System.Windows.Forms.Application.EnableVisualStyles();
-			System.Windows.Forms.Application.SetCompatibleTextRenderingDefault(false);
-
 			try
 			{
 				// Start the system tray application
@@ -186,9 +184,6 @@ namespace DeviceBridge
 		{
 			try
 			{
-				System.Windows.Forms.Application.EnableVisualStyles();
-				System.Windows.Forms.Application.SetCompatibleTextRenderingDefault(false);
-
 				// Hide the console window
 				var consoleWindow = GetConsoleWindow();
 				if (consoleWindow != IntPtr.Zero)
@@ -222,7 +217,7 @@ namespace DeviceBridge
 		{
 			MessageBox.Show("Device Bridge - Fingerprint Service\n\n" +
 				"Usage:\n" +
-				"  DeviceBridge.exe          - Run as WinForms application (default)\n" +
+				"  DeviceBridge.exe          - Run as System Tray application (default)\n" +
 				"  DeviceBridge.exe help     - Show this help\n\n" +
 				"WinForms Mode:\n" +
 				"  - Modern graphical user interface\n" +

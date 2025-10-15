@@ -17,6 +17,7 @@ namespace DeviceBridge
     {
         private NotifyIcon _trayIcon;
         private bool _isMinimizedToTray = false;
+        private bool _startMinimized = true;
 
         private Task _webServerTask;
         private string _currentServerUrl = "";
@@ -35,8 +36,23 @@ namespace DeviceBridge
                 this.Icon = SystemIcons.Application;
             }
 
+            // Always use MainForm's own tray icon and menu
             InitializeTrayIcon();
             InitializeWebServer();
+
+            // Start minimized to system tray by default (without requiring user action)
+            this.Shown += (s, e) =>
+            {
+                try
+                {
+                    if (_startMinimized)
+                    {
+                        HideToTray();
+                        _startMinimized = false;
+                    }
+                }
+                catch { }
+            };
         }
 
         private void InitializeTrayIcon()
@@ -164,9 +180,7 @@ namespace DeviceBridge
             this.Hide();
             this.WindowState = FormWindowState.Normal; // Reset window state
             
-            _trayIcon.ShowBalloonTip(3000, "Device Bridge", 
-                "Application minimized to system tray. Right-click the tray icon to restore.", 
-                ToolTipIcon.Info);
+            try { _trayIcon?.ShowBalloonTip(3000, "Device Bridge", "Application minimized to system tray. Right-click the tray icon to restore.", ToolTipIcon.Info); } catch { }
         }
 
         private void ShowFromTray()

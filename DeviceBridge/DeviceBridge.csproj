@@ -184,6 +184,7 @@
       <DependentUpon>Resources.resx</DependentUpon>
     </Compile>
     <Compile Include="Services\AssemblyResolver.cs" />
+    <Compile Include="Services\FocusHost.cs" />
     <Compile Include="Services\DeviceDiagnostics.cs" />
     <Compile Include="Services\FingerprintEnroll.cs" />
     <Compile Include="Services\WinFormsPump.cs" />

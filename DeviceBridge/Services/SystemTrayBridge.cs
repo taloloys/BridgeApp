@@ -13,6 +13,7 @@ namespace DeviceBridge.Services
     {
         private NotifyIcon _trayIcon;
         private Form _hiddenWindow;
+        private MainForm _mainForm;
         
         // Static reference for access from other classes
         private static SystemTrayBridge _currentInstance;
@@ -61,18 +62,17 @@ namespace DeviceBridge.Services
             };
 
             // Create context menu
-            var showMenuItem = new ToolStripMenuItem("Show Status", null, OnShowStatus);
-            var restartMenuItem = new ToolStripMenuItem("Restart Service", null, OnRestartService);
+            var openMainItem = new ToolStripMenuItem("Show Main Window", null, OnOpenMainWindow);
             var exitMenuItem = new ToolStripMenuItem("Exit", null, OnExit);
 
-            _trayIcon.ContextMenuStrip.Items.Add(showMenuItem);
-            _trayIcon.ContextMenuStrip.Items.Add(new ToolStripSeparator());
-            _trayIcon.ContextMenuStrip.Items.Add(restartMenuItem);
+            _trayIcon.ContextMenuStrip.Items.Add(openMainItem);
             _trayIcon.ContextMenuStrip.Items.Add(new ToolStripSeparator());
             _trayIcon.ContextMenuStrip.Items.Add(exitMenuItem);
 
-            // Double-click to show status
-            _trayIcon.DoubleClick += OnShowStatus;
+            // Double-click to open main window
+            _trayIcon.DoubleClick += OnOpenMainWindow;
+
+            try { _trayIcon.ShowBalloonTip(3000, "Device Bridge", "Running in system tray. Right-click for options.", ToolTipIcon.Info); } catch { }
         }
 
         private void InitializeHiddenWindow()
@@ -199,18 +199,30 @@ namespace DeviceBridge.Services
             }
         }
 
-        private void OnShowStatus(object sender, EventArgs e)
+        private void OnOpenMainWindow(object sender, EventArgs e)
         {
-            MessageBox.Show(
-                "Device Bridge is running in the system tray.\n\n" +
-                "Status: Active\n" +
-                "Focus handling: Enabled\n" +
-                "Fingerprint operations: Ready\n\n" +
-                "The bridge will work even when other applications are in focus.",
-                "Device Bridge Status",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Information);
+            try
+            {
+                if (_mainForm == null || _mainForm.IsDisposed)
+                {
+                    _mainForm = new MainForm();
+                }
+
+                if (!_mainForm.Visible)
+                {
+                    _mainForm.Show();
+                }
+                _mainForm.WindowState = FormWindowState.Normal;
+                _mainForm.BringToFront();
+                _mainForm.Activate();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Failed to open main window: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
+
+        // removed status dialog per request
 
         private void OnRestartService(object sender, EventArgs e)
         {

@@ -248,6 +248,7 @@ namespace DeviceBridge.Services
             {
                 systemTrayBridge.EnsureFocus();
             }
+            // else: no external focus handling required
         }
         catch (Exception ex)
         {

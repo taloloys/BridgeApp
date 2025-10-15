@@ -20,6 +20,7 @@ namespace DeviceBridge.Services
 	// private double lastQuality = 0; // Removed unused field
 	private readonly string sessionId = Guid.NewGuid().ToString("N").Substring(0, 8);
     private Form hiddenForm;
+    private DateTime lastActivityUtc = DateTime.UtcNow;
 
 	private void Log(string message)
 	{
@@ -38,6 +39,11 @@ namespace DeviceBridge.Services
 			return null;
 		}
 	}
+
+    private void TouchActivity()
+    {
+        lastActivityUtc = DateTime.UtcNow;
+    }
 
     public event Action<int, string, string, int?> OnSampleProcessed;
 
@@ -147,6 +153,7 @@ namespace DeviceBridge.Services
 
 			if (features != null)
 			{
+                TouchActivity();
 				enrollment.AddFeatures(features);
                 var needed = enrollment.FeaturesNeeded;
 				var status = enrollment.TemplateStatus;
@@ -187,6 +194,7 @@ namespace DeviceBridge.Services
 	public void OnFingerTouch(object c, string s)
 	{
 		Log($"OnFingerTouch - fingerDetected={fingerDetected}");
+        TouchActivity();
         if (!fingerDetected)
         {
             OnSampleProcessed?.Invoke(5, "scanning", "Finger detected on scanner...", null);
@@ -211,6 +219,7 @@ namespace DeviceBridge.Services
         Log($"OnSampleQuality: {f}");
         if (f == CaptureFeedback.Good)
         {
+            TouchActivity();
             OnSampleProcessed?.Invoke(50, "scanning", "Good quality detected", (int?)enrollment.FeaturesNeeded);
         }
     }
@@ -226,10 +235,16 @@ namespace DeviceBridge.Services
 
 	public bool TryEnroll(int timeoutMs, out byte[] templateBytes)
 	{
+		return TryEnroll(timeoutMs, System.Threading.CancellationToken.None, out templateBytes);
+	}
+
+	public bool TryEnroll(int timeoutMs, System.Threading.CancellationToken cancellationToken, out byte[] templateBytes)
+	{
 		templateBytes = null;
 		resultTemplate = null;
 		fingerDetected = false;
 		enrollment.Clear();
+        TouchActivity();
 
 		Log($"TryEnroll start timeoutMs={timeoutMs}");
 		
@@ -259,16 +274,23 @@ namespace DeviceBridge.Services
 		try
 		{
 			var checkInterval = 50; // Faster polling
-			var elapsed = 0;
-			while (elapsed < timeoutMs)
+			while ((DateTime.UtcNow - lastActivityUtc).TotalMilliseconds < timeoutMs)
 			{
+				if (cancellationToken.IsCancellationRequested)
+				{
+					Log("TryEnroll cancelled by token");
+					OnSampleProcessed?.Invoke(0, "cancelled", "Enrollment cancelled", null);
+					return false;
+				}
+
 				// Critical: Pump Windows messages for DPFP callbacks
                 // Always pump on the message thread, even when app is not foreground
                 try 
                 { 
                     Application.DoEvents(); 
                     // Also try to maintain focus periodically
-                    if (elapsed % 2000 == 0) // Every 2 seconds
+					var elapsedSinceActivityMs = (int)(DateTime.UtcNow - lastActivityUtc).TotalMilliseconds;
+					if (elapsedSinceActivityMs % 2000 < checkInterval) // ~every 2s in inactivity window
                     {
                         try
                         {
@@ -292,13 +314,13 @@ namespace DeviceBridge.Services
 							resultTemplate.Serialize(ms);
 							templateBytes = ms.ToArray();
 						}
-						Log($"TryEnroll SUCCESS at {elapsed}ms, bytes={templateBytes?.Length}");
+						Log($"TryEnroll SUCCESS at bytes={templateBytes?.Length}");
 						return true;
 					}
 				}
                 try { Thread.Sleep(checkInterval); } catch { }
-				elapsed += checkInterval;
-				if (elapsed % 1000 == 0) Log($"waiting... elapsed={elapsed}ms");
+                var totalElapsed = (int)(DateTime.UtcNow - lastActivityUtc).TotalMilliseconds;
+                if (totalElapsed % 1000 < checkInterval) Log($"waiting... inactive-window-elapsed={totalElapsed}ms");
 			}
 			Log("TryEnroll TIMEOUT");
 			return false;

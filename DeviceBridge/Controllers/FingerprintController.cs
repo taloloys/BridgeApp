@@ -14,6 +14,7 @@ namespace DeviceBridge.Controllers
 	{
 		private static readonly System.Threading.SemaphoreSlim _deviceLock = new System.Threading.SemaphoreSlim(1, 1);
 		private static readonly ConcurrentDictionary<string, ProgressState> _progress = new ConcurrentDictionary<string, ProgressState>();
+        private static readonly ConcurrentDictionary<string, System.Threading.CancellationTokenSource> _sessionCancels = new ConcurrentDictionary<string, System.Threading.CancellationTokenSource>();
 
 		private class ProgressState
 		{
@@ -30,6 +31,8 @@ namespace DeviceBridge.Controllers
 		{
 			var sessionId = Guid.NewGuid().ToString("N").Substring(0, 8);
 			_progress[sessionId] = new ProgressState { Progress = 0, Phase = "waiting", Message = "Initializing...", ScansLeft = null };
+            var cts = new System.Threading.CancellationTokenSource();
+            _sessionCancels[sessionId] = cts;
 
 			try
 			{
@@ -63,7 +66,7 @@ namespace DeviceBridge.Controllers
 									(key, s) => { s.Progress = p; s.Phase = phase; s.Message = msg; s.ScansLeft = left; s.UpdatedUtc = DateTime.UtcNow; return s; });
 							};
 
-							var okEnroll = en.TryEnroll(30_000, out var templateBytes);
+							var okEnroll = en.TryEnroll(30_000, cts.Token, out var templateBytes);
 							if (okEnroll && templateBytes != null)
 							{
 								_progress.AddOrUpdate(sessionId,
@@ -72,9 +75,18 @@ namespace DeviceBridge.Controllers
 							}
 							else
 							{
-								_progress.AddOrUpdate(sessionId,
-									key => new ProgressState { Progress = 0, Phase = "failed", Message = "Enrollment failed or timed out", ScansLeft = null, Template = null, UpdatedUtc = DateTime.UtcNow },
-									(key, s) => { s.Progress = 0; s.Phase = "failed"; s.Message = "Enrollment failed or timed out"; s.ScansLeft = null; s.Template = null; s.UpdatedUtc = DateTime.UtcNow; return s; });
+								if (cts.IsCancellationRequested)
+								{
+									_progress.AddOrUpdate(sessionId,
+										key => new ProgressState { Progress = 0, Phase = "cancelled", Message = "Enrollment cancelled", ScansLeft = null, Template = null, UpdatedUtc = DateTime.UtcNow },
+										(key, s) => { s.Progress = 0; s.Phase = "cancelled"; s.Message = "Enrollment cancelled"; s.ScansLeft = null; s.Template = null; s.UpdatedUtc = DateTime.UtcNow; return s; });
+								}
+								else
+								{
+									_progress.AddOrUpdate(sessionId,
+										key => new ProgressState { Progress = 0, Phase = "failed", Message = "Enrollment failed or timed out", ScansLeft = null, Template = null, UpdatedUtc = DateTime.UtcNow },
+										(key, s) => { s.Progress = 0; s.Phase = "failed"; s.Message = "Enrollment failed or timed out"; s.ScansLeft = null; s.Template = null; s.UpdatedUtc = DateTime.UtcNow; return s; });
+								}
 							}
 						}
 					}
@@ -88,7 +100,8 @@ namespace DeviceBridge.Controllers
 					}
 					finally
 					{
-						try { _deviceLock.Release(); } catch { }
+							try { _deviceLock.Release(); } catch { }
+                            _sessionCancels.TryRemove(sessionId, out _);
 					}
 				});
 
@@ -107,10 +120,25 @@ namespace DeviceBridge.Controllers
 			if (string.IsNullOrWhiteSpace(sessionId)) return BadRequest("sessionId required");
 			if (_progress.TryGetValue(sessionId, out var st))
 			{
-				return Ok(new { progress = st.Progress, phase = st.Phase, message = st.Message, scansLeft = st.ScansLeft, done = st.Phase == "done", failed = st.Phase == "failed" });
+				return Ok(new { progress = st.Progress, phase = st.Phase, message = st.Message, scansLeft = st.ScansLeft, done = st.Phase == "done", failed = st.Phase == "failed", cancelled = st.Phase == "cancelled" });
 			}
 			return Ok(new { progress = 0, phase = "waiting", message = "No updates yet", scansLeft = (int?)null, done = false, failed = false });
 		}
+
+        [HttpPost, Route("enroll/cancel/{sessionId}")]
+        public IHttpActionResult EnrollCancel(string sessionId)
+        {
+            if (string.IsNullOrWhiteSpace(sessionId)) return BadRequest("sessionId required");
+            if (_sessionCancels.TryGetValue(sessionId, out var cts))
+            {
+                try { cts.Cancel(); } catch { }
+                _progress.AddOrUpdate(sessionId,
+                    key => new ProgressState { Progress = 0, Phase = "cancelled", Message = "Enrollment cancelled", ScansLeft = null, Template = null, UpdatedUtc = DateTime.UtcNow },
+                    (key, s) => { s.Progress = 0; s.Phase = "cancelled"; s.Message = "Enrollment cancelled"; s.ScansLeft = null; s.Template = null; s.UpdatedUtc = DateTime.UtcNow; return s; });
+                return Ok(new { cancelled = true });
+            }
+            return Ok(new { cancelled = false });
+        }
 
 		[HttpPost, Route("enroll/finish/{sessionId}")]
 		public IHttpActionResult EnrollFinish(string sessionId)

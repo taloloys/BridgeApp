@@ -250,6 +250,12 @@
         "Entry"
         {
         "MsmKey" = "8:_84A32770AF354D1ED080A47F76C52D79"
+        "OwnerKey" = "8:_ECB618DE3F229AB90BD9BBAE76F3B21C"
+        "MsmSig" = "8:_UNDEFINED"
+        }
+        "Entry"
+        {
+        "MsmKey" = "8:_84A32770AF354D1ED080A47F76C52D79"
         "OwnerKey" = "8:_21F504FF883DDB24A29B90EE3238E048"
         "MsmSig" = "8:_UNDEFINED"
         }
@@ -1518,15 +1524,15 @@
         {
         "Name" = "8:Microsoft Visual Studio"
         "ProductName" = "8:DeviceBridge"
-        "ProductCode" = "8:{F543B409-CDFF-4837-BCF8-9FCF90A25923}"
-        "PackageCode" = "8:{E56DCA5E-72FA-449B-804E-8A3C2A9ADF1F}"
+        "ProductCode" = "8:{1C766F77-FF75-4A92-B385-4D0C11E6BDF2}"
+        "PackageCode" = "8:{9135A2BB-663C-4273-BB23-6239530F2375}"
         "UpgradeCode" = "8:{AE77659A-C83F-4F2B-869F-E854ADCECC59}"
         "AspNetVersion" = "8:4.0.30319.0"
         "RestartWWWService" = "11:FALSE"
         "RemovePreviousVersions" = "11:TRUE"
         "DetectNewerInstalledVersion" = "11:TRUE"
         "InstallAllUsers" = "11:TRUE"
-        "ProductVersion" = "8:1.2.0"
+        "ProductVersion" = "8:1.2.1"
         "Manufacturer" = "8:Tresmongos"
         "ARPHELPTELEPHONE" = "8:"
         "ARPHELPLINK" = "8:"
